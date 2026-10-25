@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Riesenrad · Winkel und Höhe</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#173347;background:#eef4f7}*{box-sizing:border-box}body{margin:0;padding:32px 20px}main{max-width:1120px;margin:auto}header{margin-bottom:24px}.eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:#527482;font-weight:700}h1{font-size:clamp(28px,5vw,42px);margin:8px 0}p{line-height:1.6;color:#526c79}.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px}.stage,.panel{background:white;border:1px solid #dce6eb;border-radius:22px;box-shadow:0 10px 35px #15374c08}.stage{overflow:hidden;position:relative}.hint{text-align:center;font-size:13px;margin:0;padding:0 16px 20px}svg{display:block;width:100%;touch-action:none;cursor:grab;user-select:none}svg.dragging{cursor:grabbing}.panel{padding:25px;align-self:start}label{display:block;font-weight:650;margin:0 0 10px}.control{margin-bottom:27px}input[type=range]{width:100%;accent-color:#167b91}input[type=number]{width:95px;border:1px solid #b7cbd4;border-radius:8px;padding:8px;font:inherit;color:inherit}output{float:right;font-variant-numeric:tabular-nums;color:#167b91}.scale{display:flex;justify-content:space-between;color:#6c838f;font-size:12px}button{font:inherit;font-weight:650;border:0;border-radius:10px;padding:13px 17px;cursor:pointer;width:100%;background:#167b91;color:white}button:hover{background:#11687a}button:focus-visible,input:focus-visible,svg:focus-visible{outline:3px solid #e6a324;outline-offset:4px}.secondary{background:#edf3f6;color:#294c60;margin-top:10px}.secondary:hover{background:#dfebef}.result{margin-top:23px;background:#f2f7f9;border-radius:12px;padding:17px;min-height:135px}.result h2{font-size:14px;margin:0 0 12px}.reading{display:flex;justify-content:space-between;margin-top:10px;font-size:14px}.reading strong{font-size:20px;font-variant-numeric:tabular-nums}.note{font-size:12px;margin-bottom:0}.status{font-size:12px;color:#617b88;min-height:18px;margin:9px 0 0}footer{font-size:13px;color:#617b88;margin-top:20px}@media(max-width:760px){body{padding:22px 12px}.layout{grid-template-columns:1fr}.panel{padding:22px}header{padding:0 8px}}
+
+/* Schlichte Oberfläche mit Fokus auf Rad und Bedienung. */
+:root{background:#fff;color:#263b46}body{padding:20px}main{max-width:1050px}.layout{align-items:center;gap:24px}.stage,.panel{border:0;border-radius:0;box-shadow:none;background:transparent}.panel{padding:16px;align-self:center}.result{background:#f5f6f7;border-radius:8px;min-height:110px}.control{margin-bottom:24px}.status{margin-bottom:0}button{border-radius:7px}.stage svg{max-height:76vh}.hint{display:none}@media(max-width:760px){body{padding:8px}.layout{gap:0}.panel{padding:12px 20px}.stage svg{max-height:58vh}}
+</style>
+</head>
+<body><main>
+<div class="layout"><section class="stage" aria-label="Interaktives Riesenrad">
+<svg id="scene" viewBox="0 0 640 620" role="img" tabindex="0" aria-label="Drehbares Riesenrad mit zehn Gondeln. Mit den Pfeiltasten drehen; Umschalttaste für größere Schritte.">
+<defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#f1f8fc"/><stop offset="1" stop-color="#fff"/></linearGradient></defs>
+<rect width="640" height="620" fill="url(#sky)"/>
+<path d="M0 561 Q180 530 320 555 T640 552 V620 H0Z" fill="#e8f1ed"/>
+<path d="M215 565 L320 290 L425 565 M250 477 H390" fill="none" stroke="#34596b" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M185 569 H455" stroke="#26495d" stroke-width="10" stroke-linecap="round"/>
+<line x1="45" x2="595" y1="290" y2="290" stroke="#b1c4cd" stroke-dasharray="5 7"/>
+<text x="576" y="280" fill="#78909d" font-size="13">0°</text>
+<g id="wheel"></g><g id="measure" visibility="hidden"><path id="heightLine" fill="none" stroke="#d64a4f" stroke-width="2" stroke-dasharray="6 5"/><path id="angleArc" fill="none" stroke="#167b91" stroke-width="3"/></g>
+<g id="cabins"></g><circle cx="320" cy="290" r="15" fill="#fff" stroke="#34596b" stroke-width="7"/><circle cx="320" cy="290" r="5" fill="#167b91"/>
+</svg>
+</section><aside class="panel" aria-label="Steuerung und Messwerte">
+<div class="reading" style="margin-bottom:24px"><span>Winkel α</span><strong id="angleResult">0,0°</strong></div>
+<div class="control"><label for="radius">Radradius</label><input id="radius" type="number" min="1" max="100" step="0.5" value="10"> <span>Meter</span></div>
+<button id="measureButton" aria-pressed="false">Höhe anzeigen</button>
+<button id="reset" class="secondary">Zurücksetzen</button>
+<div id="heightReading" class="result" hidden><div class="reading"><span>Höhe h zur Nabe</span><strong id="heightResult">0,00 m</strong></div></div>
+</aside></div>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
+const scene=$('scene'),wheel=$('wheel'),cabins=$('cabins'),radiusInput=$('radius');
+let angle=0,radius=10,showHeight=false,drag=null;
+const fmt=(n,d=1)=>new Intl.NumberFormat('de-DE',{maximumFractionDigits:d,minimumFractionDigits:d}).format(Math.abs(n)<1e-9?0:n);
+function svg(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);parent.appendChild(e);return e;}
+svg('circle',{cx:320,cy:290,r:218,fill:'none',stroke:'#93b6c7','stroke-width':9},wheel);
+svg('circle',{cx:320,cy:290,r:206,fill:'none',stroke:'#d2e2e9','stroke-width':3},wheel);
+const gondolas=[];
+for(let i=0;i<10;i++){
+ const t=i*2*Math.PI/10;
+ svg('line',{x1:320,y1:290,x2:320+218*Math.cos(t),y2:290-218*Math.sin(t),stroke:'#739aaf','stroke-width':4},wheel);
+ const g=svg('g',{},cabins);gondolas.push(g);
+ svg('path',{d:'M-15 18 L0 0 L15 18',fill:'none',stroke:'#466677','stroke-width':3},g);
+ svg('rect',{x:-21,y:17,width:42,height:35,rx:8,fill:i===0?'#d9444d':'#257e96',stroke:'white','stroke-width':2},g);
+ svg('path',{d:'M-14 23 H14 V35 H-14Z',fill:i===0?'#ffd5d3':'#caeaf0'},g);
+ svg('circle',{cx:0,cy:0,r:5,fill:i===0?'#d9444d':'#34596b'},g);
+}
+function render(){
+ wheel.setAttribute('transform',`rotate(${-angle} 320 290)`);
+ for(let i=0;i<10;i++){const t=(angle+i*36)*Math.PI/180;gondolas[i].setAttribute('transform',`translate(${320+218*Math.cos(t)} ${290-218*Math.sin(t)})`);}
+ $('angleResult').textContent=fmt(angle)+'°';
+ $('heightReading').hidden=!showHeight;
+ $('measureButton').textContent=showHeight?'Höhe ausblenden':'Höhe anzeigen';
+ $('measureButton').setAttribute('aria-pressed',String(showHeight));
+ const t=angle*Math.PI/180,x=320+218*Math.cos(t),y=290-218*Math.sin(t),h=radius*Math.sin(t);
+ $('heightResult').textContent=(h>1e-9?'+':'')+fmt(h,2)+' m';
+ $('heightLine').setAttribute('d',`M320 290 H${x} V${y}`);
+ const arcAngle=((angle%360)+360)%360,rad=arcAngle*Math.PI/180;
+ $('angleArc').setAttribute('d',arcAngle===0?'':`M366 290 A46 46 0 ${arcAngle>180?1:0} 0 ${320+46*Math.cos(rad)} ${290-46*Math.sin(rad)}`);
+ $('measure').setAttribute('visibility',showHeight?'visible':'hidden');
+}
+function snap(n){
+ const a=Math.round(n/30)*30,b=Math.round(n/45)*45;
+ const closest=Math.abs(n-a)<=Math.abs(n-b)?a:b;
+ return Math.abs(n-closest)<=3?closest:n;
+}
+function setAngle(n){angle=n;render();}
+function readRadius(){const n=radiusInput.valueAsNumber;if(!Number.isFinite(n)||n<1||n>100){radiusInput.setCustomValidity('Bitte einen Radius zwischen 1 und 100 Metern eingeben.');return false;}radiusInput.setCustomValidity('');radius=n;return true;}
+radiusInput.addEventListener('input',()=>{if(readRadius())render();});
+$('measureButton').addEventListener('click',()=>{
+ if(!showHeight&&!readRadius()){radiusInput.reportValidity();return;}
+ showHeight=!showHeight;render();
+});
+$('reset').addEventListener('click',()=>{
+ angle=0;radius=10;showHeight=false;drag=null;
+ radiusInput.value=10;radiusInput.setCustomValidity('');
+ scene.classList.remove('dragging');render();
+});
+function pointerAngle(e){const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(scene.getScreenCTM().inverse());return {angle:Math.atan2(290-p.y,p.x-320)*180/Math.PI,distance:Math.hypot(p.x-320,p.y-290)};}
+scene.addEventListener('pointerdown',e=>{if(drag||e.button!==0)return;const p=pointerAngle(e);if(p.distance<25)return;drag={id:e.pointerId,last:p.angle,raw:angle};scene.setPointerCapture(e.pointerId);scene.classList.add('dragging');scene.focus();e.preventDefault();});
+scene.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const p=pointerAngle(e);if(p.distance<25)return;let delta=p.angle-drag.last;if(delta>180)delta-=360;if(delta<-180)delta+=360;drag.last=p.angle;drag.raw+=delta;setAngle(snap(drag.raw));});
+function endDrag(e){if(drag&&e.pointerId===drag.id){drag=null;scene.classList.remove('dragging');}}
+scene.addEventListener('pointerup',endDrag);scene.addEventListener('pointercancel',endDrag);scene.addEventListener('lostpointercapture',endDrag);
+scene.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();setAngle(angle+(['ArrowLeft','ArrowUp'].includes(e.key)?1:-1)*(e.shiftKey?10:1));}});
+render();
+</script></body></html>
